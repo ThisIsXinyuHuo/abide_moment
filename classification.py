@@ -126,8 +126,10 @@ class ABIDE_Trainer:
                                                     local_files_only=True
                                                 )
         self.model.init()
-        print('Model initialized, training mode: ', self.args.mode)
-
+        print('Model initialized, training mode:', self.args.mode, 'model type:', self.args.model)
+        logger.info(f"Model initialized, training mode: {self.args.mode}, model type: {self.args.model}")
+        logger.info(f"batch size: {self.args.batch_size}, epoch: {self.args.epochs}")
+        
         #using cross entropy loss for classification 
         self.criterion = torch.nn.CrossEntropyLoss()
         
@@ -255,12 +257,12 @@ class ABIDE_Trainer:
             if self.args.mode == 'linear_probing':
                 self.train_epoch_lp()
                 self.evaluate_epoch()
-                self.save_checkpoint(epoch = epoch)
+                #self.save_checkpoint(epoch = epoch)
             
             elif self.args.mode == 'full_finetuning':
                 self.train_epoch_ft()
                 self.evaluate_epoch()
-                self.save_checkpoint(epoch = epoch)
+                #self.save_checkpoint(epoch = epoch)
             
             #break after training SVM, only need one 'epoch'
             elif self.args.mode == 'unsupervised_representation_learning':
@@ -430,44 +432,26 @@ class ABIDE_Trainer:
 
         torch.save(self.model.state_dict(), directory/f"MOMENT_Classification.pth")
         print('Model saved at', directory)
-        
-        model1 = MOMENTPipeline.from_pretrained(
-                                                    f"./models/MOMENT-1-{self.args.model}",
-                                                    model_kwargs={
-                                                        'task_name': 'classification',
-                                                        'n_channels': 200,
-                                                        'num_class': 2,
-                                                        'freeze_encoder': False if self.args.mode == 'full_finetuning' else True,
-                                                        'freeze_embedder': False if self.args.mode == 'full_finetuning' else True,
-                                                        'reduction': self.args.reduction,
-                                                        #Disable gradient checkpointing for finetuning or linear probing to 
-                                                        #avoid warning as MOMENT encoder is frozen
-                                                        'enable_gradient_checkpointing': True if self.args.mode == 'full_finetuning' else False, 
-                                                    },
-                                                    local_files_only=True
-                                                )
-        model1.init()
-        model1.load_state_dict(torch.load(directory/f"MOMENT_Classification.pth", weights_only=True))
-        model2 = MOMENTPipeline.from_pretrained(
-                                                    f"./models/MOMENT-1-{self.args.model}",
-                                                    model_kwargs={
-                                                        'task_name': 'classification',
-                                                        'n_channels': 200,
-                                                        'num_class': 2,
-                                                        'freeze_encoder': False if self.args.mode == 'full_finetuning' else True,
-                                                        'freeze_embedder': False if self.args.mode == 'full_finetuning' else True,
-                                                        'reduction': self.args.reduction,
-                                                        #Disable gradient checkpointing for finetuning or linear probing to 
-                                                        #avoid warning as MOMENT encoder is frozen
-                                                        'enable_gradient_checkpointing': True if self.args.mode == 'full_finetuning' else False, 
-                                                    },
-                                                    local_files_only=True
-                                                )
-        model2.init()
-        model2.load_state_dict(torch.load(directory/f"MOMENT_Classification.pth", weights_only=True))
-        print(compare_models(model1, model2))
-        
 
+        model = MOMENTPipeline.from_pretrained(
+                                                    f"./models/MOMENT-1-{self.args.model}",
+                                                    model_kwargs={
+                                                        'task_name': 'classification',
+                                                        'n_channels': 200,
+                                                        'num_class': 2,
+                                                        'freeze_encoder': False if self.args.mode == 'full_finetuning' else True,
+                                                        'freeze_embedder': False if self.args.mode == 'full_finetuning' else True,
+                                                        'reduction': self.args.reduction,
+                                                        #Disable gradient checkpointing for finetuning or linear probing to
+                                                        #avoid warning as MOMENT encoder is frozen
+                                                        'enable_gradient_checkpointing': True if self.args.mode == 'full_finetuning' else False,
+                                                    },
+                                                    local_files_only=True
+                                                )
+        model.init()
+        model.load_state_dict(torch.load(directory/f"MOMENT_Classification.pth", weights_only=True))
+        print(model)
+    
     def save_svm(self):
         directory = Path(
             f"{self.output_dir}/saved_models"
@@ -475,20 +459,6 @@ class ABIDE_Trainer:
         directory.mkdir(parents=True, exist_ok=True)
         dump(self.clf, directory/"svm_model.joblib")
 
-def compare_models(model_1, model_2):
-    models_differ = 0
-    for key_item_1, key_item_2 in zip(model_1.state_dict().items(), model_2.state_dict().items()):
-        if torch.equal(key_item_1[1], key_item_2[1]):
-            #print( key_item_1[0])
-            pass
-        else:
-            models_differ += 1
-            if (key_item_1[0] == key_item_2[0]):
-                print('Mismtach found at', key_item_1[0])
-            else:
-                raise Exception
-    if models_differ == 0:
-        print('Models match perfectly! :)')
     
 if __name__ == '__main__':
     
